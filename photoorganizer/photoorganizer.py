@@ -10,6 +10,8 @@ import shutil
 import glob
 import hashlib
 from __init__ import get_version
+from PIL import Image
+from PIL.ExifTags import TAGS
 
 TEXT_ONLY = False
 gray = 30
@@ -50,11 +52,20 @@ def check_for_md5(fold, fnew):
 
 
 def get_timestamp(path_name):
-    statinfo = os.stat(path_name)
-    return time.localtime(statinfo.st_mtime)
+    try:
+        ret = {}
+        i = Image.open(path_name)
+        info = i._getexif()
+        for tag, value in info.items():
+            decoded = TAGS.get(tag, tag)
+            ret[decoded] = value
+        return time.strptime(ret['DateTime'], '%Y:%m:%d %H:%M:%S')
+    except:
+        statinfo = os.stat(path_name)
+        return time.localtime(statinfo.st_mtime)
 
 
-def process_folder(file_extension, test_mode, mode):
+def process_folder(file_extension, test_mode, mode, output_folder):
     pathname = os.getcwd()
     if not test_mode:
         print "Snooping files @ " + pathname
@@ -62,12 +73,16 @@ def process_folder(file_extension, test_mode, mode):
     else:
         print "#Script to help rename a bunch of photos and videos"
     file_list = glob.glob(pathname + '/*.' + file_extension)
-    for fname in file_list:
+    output_folder = os.path.abspath(output_folder)
+    if not os.path.exists(output_folder):
+        print "ERROR: Destination folder does not exist. Please, create is first."
+        exit(1)
+    for fname in sorted(file_list):
         path_name, file_name = os.path.split(fname)
         timestamp = time.strftime("%Y%m%d_%H%M%S", get_timestamp(fname))
         new_fname = timestamp + "_" + file_name
         destination_folder = time.strftime("%Y/%Y%m", get_timestamp(fname))
-        copy_file(fname, path_name + '/' +
+        copy_file(fname, output_folder + '/' +
                   destination_folder + '/' + new_fname, test_mode, mode)
 
 
@@ -86,7 +101,7 @@ def copy_file(old_fname, new_fname, test_mode, mode):
     if test_mode:
         print "cp -vpn " + old_fname + " " + new_fname
         if mode == "move":
-            print "rm -vn " + old_fname
+            print "rm -v " + old_fname
     else:
         shutil.copy(old_fname, new_fname)
         if not check_for_md5(old_fname, new_fname):
@@ -108,6 +123,8 @@ def main():
     parser.add_argument(
         '-e', '--extension', help='File extension to be used', required=True)
     parser.add_argument(
+        '-o', '--output', help='You need to provide the output folder.', required=True)
+    parser.add_argument(
         '-m', '--mode', help='Operation Mode. Choose between "move" or "copy". Use move AT YOUR OWN RISK!', required=True)
     parser.add_argument(
         "--chicken", help="Chicken mode. Only shows what to do. Does NOT CHANGE anything. You can send this output to a text file, edit it and run it by yourself.", action="store_true")
@@ -118,7 +135,7 @@ def main():
     if args.chicken:
         print("#"),
     print color(yellow, 1) + "UPhO - Ultra Photo Organizer" + color(white, 0) + " v" + get_version() + " by Marco Lovato (maglovato@gmail.com)"
-    process_folder(args.extension, args.chicken, args.mode)
+    process_folder(args.extension, args.chicken, args.mode, args.output)
 
 if __name__ == '__main__':
     main()
